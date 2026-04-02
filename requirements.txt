@@ -1,0 +1,30 @@
+# Zero-Shot Validation — main environment dependencies
+# Install with: uv pip install -r requirements.txt
+#
+# NOTE: serve/serve_chartcoder.py must run in a SEPARATE conda env (chartcoder_env)
+# where ChartCoder/requirements.txt has been installed (torch==2.0.1, transformers==4.31.0).
+# That env also needs: pip install fastapi uvicorn[standard]
+
+# HTTP clients and server
+httpx>=0.25
+fastapi>=0.110
+uvicorn[standard]>=0.27
+
+# Config
+pyyaml>=6.0
+
+# Data downloading
+datasets>=2.18
+huggingface_hub>=0.20
+pandas>=2.0
+pyarrow>=14.0
+
+# Image processing
+Pillow>=10.0
+
+# Evaluation metrics
+scikit-image>=0.21
+numpy>=1.24
+
+# Progress bars
+tqdm>=4.60

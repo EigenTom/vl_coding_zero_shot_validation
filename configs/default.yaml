@@ -1,0 +1,113 @@
+# =============================================================================
+# Zero-Shot Actor-Critic Validation — Default Configuration
+# =============================================================================
+# All prompts, inference params, API endpoints, loop settings, and benchmark
+# settings live here. Edit this file; no Python code changes needed for tuning.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# API Endpoints
+# -----------------------------------------------------------------------------
+actor:
+  url: "http://localhost:8080"          # ChartCoder FastAPI server (serve_chartcoder.py)
+  model_id: "ChartCoder"
+
+critic:
+  url: "http://localhost:7001"          # Qwen3.5-122B-A10B via vLLM
+  model_id: "Qwen/Qwen3.5-122B-A10B"
+
+# -----------------------------------------------------------------------------
+# Inference Parameters
+# -----------------------------------------------------------------------------
+actor_params:
+  temperature: 0.1
+  top_p: 0.95
+  max_tokens: 2048
+
+critic_params:
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  min_p: 0.0
+  presence_penalty: 0.0
+  repetition_penalty: 1.0
+  max_tokens: 1024        # feedback only, no code — short output sufficient
+
+# -----------------------------------------------------------------------------
+# Prompts
+# -----------------------------------------------------------------------------
+prompts:
+  # Actor: initial code generation from chart image
+  # Sent as user text; the chart image is appended as IMAGE 1.
+  actor_initial: >-
+    Convert this chart image to Python/Matplotlib code that reproduces it as
+    accurately as possible. Output only the complete Python code with no
+    explanations or markdown fences.
+
+  # Actor: refinement given previous code + critic feedback.
+  # Placeholders: {previous_code}, {critic_feedback}
+  # The original target image is still sent so the actor has visual context.
+  actor_refine: |
+    Here is the Python/Matplotlib code that was previously generated to reproduce the target chart:
+
+    ```python
+    {previous_code}
+    ```
+
+    A visual review of the rendered output identified the following differences from the target:
+
+    {critic_feedback}
+
+    Please fix the code to address all the listed issues. Output only the complete
+    corrected Python code with no explanations or markdown fences.
+
+  # Critic: system prompt.
+  # The critic sees only the two images — no code.
+  critic_system: |
+    You are a visual chart critic. Your sole task is to compare two chart images.
+
+    If the charts are visually equivalent or very close, respond with exactly one word: DONE
+
+    Otherwise, describe all visual differences clearly and specifically so a programmer
+    can fix the code. Be precise: name chart elements, values, colors, labels, and positions.
+    Do not suggest code changes — only describe what is visually wrong.
+
+  # Critic: user prompt.
+  # [IMAGE 1] = current rendering, [IMAGE 2] = target chart (injected by critic_client.py).
+  critic_user: |
+    [IMAGE 1] = Current rendering of the generated code
+    [IMAGE 2] = Target chart to reproduce
+
+    Compare both images carefully. Identify all visual discrepancies including:
+    - Chart type and overall structure
+    - Colors, line styles, and markers
+    - Axis labels, tick values, and scales
+    - Title, legend text, and position
+    - Missing or extra elements
+    - Data values and proportions
+
+    If the charts match closely: output exactly DONE
+    Otherwise: list all differences in plain language. Be specific and actionable.
+
+# -----------------------------------------------------------------------------
+# Actor-Critic Loop Parameters
+# -----------------------------------------------------------------------------
+loop:
+  max_rounds: 3           # maximum critic-actor refinement rounds after round 0
+
+# -----------------------------------------------------------------------------
+# Rendering (ChartMimic-compatible subprocess approach)
+# -----------------------------------------------------------------------------
+rendering:
+  timeout_sec: 30         # subprocess timeout per render attempt
+  output_format: "png"    # image format written by appended plt.savefig()
+  bbox_inches: "tight"    # matches ChartMimic evaluation methodology
+
+# -----------------------------------------------------------------------------
+# Benchmark Settings
+# -----------------------------------------------------------------------------
+benchmark:
+  dataset: "./data/chartmimic/test.jsonl"
+  num_samples: -1         # -1 = use all samples; set to e.g. 50 for quick testing
+  output_dir: "./results"
+  seed: 42
