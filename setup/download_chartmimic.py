@@ -1,47 +1,87 @@
 #!/usr/bin/env python3
 """
-Download ChartMimic benchmark from HuggingFace and save as JSONL.
+Prepare ChartMimic benchmark data from the ICLR supplementary material.
 
-Downloads the ChartMimic/ChartMimic dataset, filters to the image-to-code
-task, and saves each sample as a JSON line with base64-encoded images.
+Reads Python scripts from the ChartMimic supplementary material (direct_600
+split), renders each script to PNG using subprocess + Agg backend, and saves a
+JSONL file with the rendered image and GT code path for downstream evaluation.
+
+The supplementary material must already be extracted.  Default location:
+  /data/yilu/chartmimic_supp/ChartMimic/
+
+Output JSONL format (one JSON object per line):
+  {
+    "example_id":      "bar_3",
+    "gt_code":         "<full Python source>",
+    "gt_py_path":      "/abs/path/to/bar_3.py",     # used by ChartMimic evaluators
+    "input_image_b64": "<base64-encoded PNG>"        # GT rendering = actor input image
+  }
 
 Usage:
+  # From the repo root:
   uv run python setup/download_chartmimic.py
-  uv run python setup/download_chartmimic.py --output ./data/chartmimic --split test
+  uv run python setup/download_chartmimic.py --supp-dir /data/yilu/chartmimic_supp/ChartMimic
+  uv run python setup/download_chartmimic.py --num-samples 50   # quick test
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
-import io
 import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
 
-from PIL import Image
+# ---------------------------------------------------------------------------
+# Allow running as `python setup/download_chartmimic.py` from the repo root
+# ---------------------------------------------------------------------------
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from inference.render import render_chart_code
 
 
-def pil_to_b64(img: Any, fmt: str = "PNG") -> str:
-    """Convert a PIL Image to a base64-encoded string."""
-    buf = io.BytesIO()
-    img.convert("RGB").save(buf, format=fmt)
-    return base64.b64encode(buf.getvalue()).decode()
+_DEFAULT_SUPP_DIR = "/data/yilu/chartmimic_supp/ChartMimic"
+_DEFAULT_SPLIT    = "direct_600"
+_DEFAULT_OUTPUT   = "./data/chartmimic/test.jsonl"
+
+_RENDER_CFG = {
+    "timeout_sec":   60,    # GT scripts are well-formed but some are slow
+    "output_format": "png",
+    "bbox_inches":   "tight",
+}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Download ChartMimic benchmark and save as JSONL",
+        description="Prepare ChartMimic benchmark data from supplementary material",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--output", default="./data/chartmimic",
-                        help="Directory to save the output JSONL file")
-    parser.add_argument("--split", default="test",
-                        help="Dataset split to download")
-    parser.add_argument("--task-filter", default="image-to-code",
-                        help="Filter to this Task value (empty string = no filter)")
+    parser.add_argument(
+        "--supp-dir",
+        default=_DEFAULT_SUPP_DIR,
+        help="Path to the extracted ChartMimic supplementary material root",
+    )
+    parser.add_argument(
+        "--split",
+        default=_DEFAULT_SPLIT,
+        choices=["direct_600", "customized_600", "direct_1800", "customized_1800"],
+        help="Which dataset split to use",
+    )
+    parser.add_argument(
+        "--output",
+        default=_DEFAULT_OUTPUT,
+        help="Output JSONL path",
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=-1,
+        help="Maximum number of samples to process (-1 = all)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -50,82 +90,66 @@ def main() -> None:
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        logging.error("datasets not installed. Run: uv pip install datasets")
+    supp_dir   = Path(args.supp_dir)
+    dataset_dir = supp_dir / "dataset" / args.split
+
+    if not dataset_dir.exists():
+        logging.error("Dataset directory not found: %s", dataset_dir)
         sys.exit(1)
 
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / "test.jsonl"
+    py_files = sorted(dataset_dir.glob("*.py"))
+    if not py_files:
+        logging.error("No .py files found in %s", dataset_dir)
+        sys.exit(1)
+
+    if args.num_samples > 0:
+        py_files = py_files[: args.num_samples]
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     logging.info("=" * 60)
-    logging.info("Downloading ChartMimic/ChartMimic  split=%s", args.split)
-    if args.task_filter:
-        logging.info("Task filter: %s", args.task_filter)
-    logging.info("Output: %s", output_path)
+    logging.info("ChartMimic data preparation")
+    logging.info("  Split:       %s (%d scripts)", args.split, len(py_files))
+    logging.info("  Dataset dir: %s", dataset_dir)
+    logging.info("  Output:      %s", output_path)
     logging.info("=" * 60)
-
-    ds = load_dataset("ChartMimic/ChartMimic", split=args.split, trust_remote_code=True)
-    logging.info("Total rows in split: %d", len(ds))
-
-    # Filter to image-to-code task
-    if args.task_filter:
-        ds = ds.filter(lambda row: row["Task"] == args.task_filter)
-        logging.info("Rows after task filter ('%s'): %d", args.task_filter, len(ds))
 
     n_written = 0
-    n_skipped = 0
+    n_failed  = 0
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        for i, row in enumerate(ds):
-            try:
-                # Input chart image (what the model receives)
-                input_img = row.get("InputFigurePreview")
-                if input_img is None:
-                    logging.warning("Row %d: missing InputFigurePreview — skipping", i)
-                    n_skipped += 1
-                    continue
-                if not isinstance(input_img, Image.Image):
-                    input_img = Image.fromarray(input_img)
+    with open(output_path, "w", encoding="utf-8") as out_f:
+        for i, py_path in enumerate(py_files):
+            example_id = py_path.stem          # e.g. "bar_3"
+            gt_code    = py_path.read_text(encoding="utf-8")
 
-                # Ground truth chart image (used for SSIM evaluation)
-                gt_img = row.get("GroundTruthFigurePreview")
-                if gt_img is None:
-                    logging.warning("Row %d: missing GroundTruthFigurePreview — skipping", i)
-                    n_skipped += 1
-                    continue
-                if not isinstance(gt_img, Image.Image):
-                    gt_img = Image.fromarray(gt_img)
+            # Render GT code to PNG (this IS the input image the actor receives)
+            png_bytes = render_chart_code(gt_code, _RENDER_CFG)
+            if png_bytes is None:
+                logging.warning(
+                    "[%d/%d] %s — render FAILED, skipping",
+                    i + 1, len(py_files), example_id,
+                )
+                n_failed += 1
+                continue
 
-                # Ground truth code
-                gt_code = row.get("GroundTruthFigureCode", "")
-                if not gt_code:
-                    logging.warning("Row %d: missing GroundTruthFigureCode — skipping", i)
-                    n_skipped += 1
-                    continue
+            record = {
+                "example_id":      example_id,
+                "gt_code":         gt_code,
+                "gt_py_path":      str(py_path.resolve()),
+                "input_image_b64": base64.b64encode(png_bytes).decode(),
+            }
+            out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            n_written += 1
 
-                record = {
-                    "example_id":      row.get("ExampleID", f"sample_{i:04d}"),
-                    "task":            row.get("Task", ""),
-                    "input_image_b64": pil_to_b64(input_img),
-                    "gt_code":         gt_code,
-                    "gt_image_b64":    pil_to_b64(gt_img),
-                }
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                n_written += 1
-
-                if (i + 1) % 50 == 0:
-                    logging.info("  Processed %d / %d rows  (written=%d  skipped=%d)",
-                                 i + 1, len(ds), n_written, n_skipped)
-
-            except Exception as exc:
-                logging.warning("Row %d: error (%s) — skipping", i, exc)
-                n_skipped += 1
+            if (i + 1) % 50 == 0 or (i + 1) == len(py_files):
+                logging.info(
+                    "  [%d/%d]  written=%d  failed=%d",
+                    i + 1, len(py_files), n_written, n_failed,
+                )
 
     logging.info("=" * 60)
-    logging.info("DONE  written=%d  skipped=%d", n_written, n_skipped)
+    logging.info("DONE  written=%d  failed=%d", n_written, n_failed)
     logging.info("Output: %s", output_path)
     logging.info("=" * 60)
 

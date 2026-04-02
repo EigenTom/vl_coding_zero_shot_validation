@@ -104,6 +104,13 @@ rendering:
   bbox_inches: "tight"    # matches ChartMimic evaluation methodology
 
 # -----------------------------------------------------------------------------
+# ChartMimic Data Source (used by setup/download_chartmimic.py)
+# -----------------------------------------------------------------------------
+chartmimic:
+  supp_dir: "/data/yilu/chartmimic_supp/ChartMimic"
+  split: "direct_600"
+
+# -----------------------------------------------------------------------------
 # Benchmark Settings
 # -----------------------------------------------------------------------------
 benchmark:
