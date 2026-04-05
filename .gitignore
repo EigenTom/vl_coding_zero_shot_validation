@@ -19,3 +19,6 @@ results/
 .DS_Store
 *.swp
 *.swo
+
+vllm_deployment/logs
+*.pdf

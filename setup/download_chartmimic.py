@@ -136,7 +136,7 @@ def main() -> None:
             record = {
                 "example_id":      example_id,
                 "gt_code":         gt_code,
-                "gt_py_path":      str(py_path.resolve()),
+                "gt_py_path":      str(py_path.resolve().relative_to(_ROOT)),
                 "input_image_b64": base64.b64encode(png_bytes).decode(),
             }
             out_f.write(json.dumps(record, ensure_ascii=False) + "\n")

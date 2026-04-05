@@ -89,6 +89,17 @@ else
     exit 1
 fi
 
+# 为 ChartMimic 评测创建 venv (evaluator 需要 matplotlib, python-dotenv 等)
+CHARTMIMIC_VENV="$CHARTMIMIC_SUPP_DIR/.venv"
+info "  为 ChartMimic 评测创建 venv ..."
+if [[ ! -f "$CHARTMIMIC_VENV/bin/python" ]]; then
+    uv venv "$CHARTMIMIC_VENV" --python 3.10
+fi
+uv pip install --python "$CHARTMIMIC_VENV/bin/python" \
+    "matplotlib==3.8.4" Pillow python-dotenv numpy \
+    scikit-image colormath squarify networkx "matplotlib-venn==0.11.10"
+ok "ChartMimic venv 就绪: $CHARTMIMIC_VENV"
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Step 3: ChartCoder venv
 # ═════════════════════════════════════════════════════════════════════════════
