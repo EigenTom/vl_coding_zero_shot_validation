@@ -32,7 +32,7 @@ vl_coding_zero_shot_validation/
 │   ├── download_chartcoder.py  # 下载 ChartCoder 模型
 │   └── download_chartmimic.py  # 准备 ChartMimic 评测数据
 ├── ChartCoder/                 # git submodule (thunlp/ChartCoder)
-├── ChartMimic/                 # 动态下载的补充材料 (已 gitignore)
+├── ChartMimic/                 # ChartMimic 补充材料 (已包含在仓库中)
 ├── models/                     # 模型权重目录 (已 gitignore)
 └── data/                       # 评测数据 (已 gitignore)
 ```
@@ -43,7 +43,7 @@ vl_coding_zero_shot_validation/
 - NVIDIA GPU (Ampere 及以上), CUDA 12.x 驱动
 - Python 3.10
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- git, wget, unzip
+- git
 
 ## 快速开始
 
@@ -60,16 +60,16 @@ cd vl_coding_zero_shot_validation
 # 如需使用 HuggingFace 镜像 (国内推荐):
 export HF_ENDPOINT=https://hf-mirror.com
 
-# 完整安装 (包含 ChartMimic 数据下载 + Qwen vLLM 环境)
+# 完整安装 (包含 Qwen vLLM 环境)
 bash setup.sh
 
-# 仅安装 ChartCoder 相关 (跳过 ChartMimic 下载和 Qwen 环境)
-bash setup.sh --skip-chartmimic --skip-qwen
+# 跳过 Qwen Critic 环境 (仅测试 ChartCoder baseline)
+bash setup.sh --skip-qwen
 ```
 
 脚本会自动完成:
 - 初始化 git submodule (ChartCoder)
-- 下载并解压 ChartMimic 补充材料
+- 检查 ChartMimic 补充材料 (已包含在仓库中)
 - 创建 ChartCoder 独立 venv，安装 torch + flash-attn
 - 下载 ChartCoder 模型权重 (~14GB)
 - 下载 SigLip 视觉编码器 (~3.3GB) 并更新 config.json

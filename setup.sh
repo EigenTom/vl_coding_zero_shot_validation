@@ -2,7 +2,7 @@
 # =============================================================================
 # Zero-Shot Actor-Critic Validation — One-Click Setup
 # =============================================================================
-# 用法:  bash setup.sh [--skip-chartmimic] [--skip-qwen]
+# 用法:  bash setup.sh [--skip-qwen]
 #
 # 前置条件:
 #   - Linux x86_64, NVIDIA GPU (Ampere+), CUDA 12.x 驱动已安装
@@ -11,7 +11,7 @@
 #
 # 本脚本会:
 #   0. 初始化 git submodule (ChartCoder)
-#   1. 下载并解压 ChartMimic 补充材料
+#   1. 检查 ChartMimic 补充材料 (已包含在仓库中)
 #   2. 为 ChartCoder 创建 venv 并安装依赖 (torch + flash-attn)
 #   3. 下载 ChartCoder 模型权重
 #   4. 下载 SigLip 视觉编码器并更新 config.json
@@ -25,12 +25,10 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 # ── Parse flags ──────────────────────────────────────────────────────────────
-SKIP_CHARTMIMIC=false
 SKIP_QWEN=false
 for arg in "$@"; do
     case "$arg" in
-        --skip-chartmimic) SKIP_CHARTMIMIC=true ;;
-        --skip-qwen)       SKIP_QWEN=true ;;
+        --skip-qwen) SKIP_QWEN=true ;;
     esac
 done
 
@@ -47,7 +45,6 @@ require_cmd() {
 # ── Pre-flight checks ───────────────────────────────────────────────────────
 require_cmd uv
 require_cmd git
-require_cmd unzip
 require_cmd python3.10
 
 # Detect CUDA version from nvcc or nvidia-smi
@@ -79,34 +76,17 @@ git submodule update --init --recursive
 ok "ChartCoder submodule 已就绪"
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Step 1-2: 下载 ChartMimic 补充材料
+# Step 1: 检查 ChartMimic 补充材料 (已包含在仓库中)
 # ═════════════════════════════════════════════════════════════════════════════
 CHARTMIMIC_SUPP_DIR="$ROOT_DIR/ChartMimic"
-CHARTMIMIC_URL="https://openreview.net/attachment?id=sGpCzsfd1K&name=supplementary_material"
 
-if $SKIP_CHARTMIMIC; then
-    warn "跳过 ChartMimic 下载 (--skip-chartmimic)"
-elif [[ -d "$CHARTMIMIC_SUPP_DIR/dataset" ]]; then
-    ok "ChartMimic 补充材料已存在: $CHARTMIMIC_SUPP_DIR"
+info "Step 1: 检查 ChartMimic 补充材料 ..."
+if [[ -d "$CHARTMIMIC_SUPP_DIR/dataset" ]]; then
+    ok "ChartMimic 补充材料已就绪: $CHARTMIMIC_SUPP_DIR"
 else
-    info "Step 1: 下载 ChartMimic 补充材料 ..."
-    TMPZIP=$(mktemp /tmp/chartmimic_supp_XXXXXX.zip)
-    wget -q --show-progress -O "$TMPZIP" "$CHARTMIMIC_URL" || \
-        curl -L -o "$TMPZIP" "$CHARTMIMIC_URL"
-
-    info "Step 2: 解压 ChartMimic ..."
-    TMPDIR_EXTRACT=$(mktemp -d /tmp/chartmimic_extract_XXXXXX)
-    unzip -q "$TMPZIP" -d "$TMPDIR_EXTRACT"
-
-    # 找到包含 dataset/ 的目录并移动到 ChartMimic/
-    FOUND_DIR=$(find "$TMPDIR_EXTRACT" -maxdepth 3 -type d -name "dataset" | head -1 | xargs dirname)
-    if [[ -z "$FOUND_DIR" ]]; then
-        err "解压后找不到 dataset/ 目录"
-        exit 1
-    fi
-    mv "$FOUND_DIR" "$CHARTMIMIC_SUPP_DIR"
-    rm -rf "$TMPZIP" "$TMPDIR_EXTRACT"
-    ok "ChartMimic 已解压到: $CHARTMIMIC_SUPP_DIR"
+    err "ChartMimic 补充材料不存在: $CHARTMIMIC_SUPP_DIR/dataset"
+    err "请确认仓库克隆完整 (ChartMimic/ 目录应已包含在仓库中)"
+    exit 1
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════

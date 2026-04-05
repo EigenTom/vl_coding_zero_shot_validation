@@ -6,9 +6,11 @@ __pycache__/
 .venv_qwen/
 
 # 动态下载的数据和模型 (通过 setup.sh 获取)
-ChartMimic/
 models/
 data/
+
+# 虚拟环境
+ChartMimic/.venv
 
 # 运行结果
 results/
