@@ -1,0 +1,3 @@
+[submodule "ChartCoder"]
+	path = ChartCoder
+	url = https://github.com/thunlp/ChartCoder

@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -82,7 +83,7 @@ def render_chart_code(code: str, cfg: dict) -> bytes | None:
         env["MPLBACKEND"] = "Agg"   # non-interactive backend, no display needed
 
         result = subprocess.run(
-            ["python3", script_path],
+            [sys.executable, script_path],
             timeout=timeout,
             capture_output=True,
             text=True,

@@ -108,6 +108,8 @@ def main() -> None:
     # Run control
     parser.add_argument("--skip-baseline", action="store_true",
                         help="Skip baseline pass if results_baseline.jsonl already exists")
+    parser.add_argument("--skip-critic", action="store_true",
+                        help="Run baseline pass only; skip critic pass entirely")
     parser.add_argument("--seed", type=int, default=None,
                         help="Override benchmark.seed")
 
@@ -150,6 +152,7 @@ def main() -> None:
         output_dir=output_dir,
         num_samples=args.num_samples,
         skip_baseline=args.skip_baseline,
+        skip_critic=args.skip_critic,
     )
 
 

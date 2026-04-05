@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import copy
 import io
 import logging
 import sys
@@ -95,41 +94,31 @@ def _run_inference(
 ) -> str:
     """Run a single forward pass and return the decoded output string."""
     from llava.constants import DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX  # noqa: PLC0415
-    from llava.conversation import conv_templates                        # noqa: PLC0415
     from llava.mm_utils import process_images, tokenizer_image_token     # noqa: PLC0415
 
-    # Build conversation using DeepSeekCoder template
-    conv = copy.deepcopy(conv_templates["deepseekcoder"])
-
+    # Build prompt the same way as ChartCoder/inference.py — plain string, no conv_templates
     if image_pil is not None:
-        user_message = DEFAULT_IMAGE_TOKEN + "\n" + text
+        prompt = f"### Instruction:\n{DEFAULT_IMAGE_TOKEN}\n{text}\n### Response:\n"
     else:
-        user_message = text
+        prompt = f"### Instruction:\n{text}\n### Response:\n"
 
-    conv.append_message(conv.roles[0], user_message)
-    conv.append_message(conv.roles[1], None)
-    prompt = conv.get_prompt()
-
-    # Tokenise prompt (replaces <image> placeholder with IMAGE_TOKEN_INDEX)
     input_ids = tokenizer_image_token(
         prompt, _tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt"
     ).unsqueeze(0).to(_model.device)
 
-    # Process image into tensor(s)
+    # Process image — take index [0] to get a single tensor, then unsqueeze for batch dim
     if image_pil is not None:
-        image_tensor = process_images([image_pil], _image_processor, _model.config)
-        if isinstance(image_tensor, list):
-            image_tensor = [
-                t.to(_model.device, dtype=torch.float16) for t in image_tensor
-            ]
-        else:
-            image_tensor = image_tensor.to(_model.device, dtype=torch.float16)
+        image_tensor = process_images([image_pil], _image_processor, _model.config)[0]
+        image_tensor = image_tensor.unsqueeze(0).half().to(_model.device)
+        image_sizes = [image_pil.size]
     else:
         image_tensor = None
+        image_sizes = None
 
     # Generate
     gen_kwargs: dict[str, Any] = {
         "images": image_tensor,
+        "image_sizes": image_sizes,
         "max_new_tokens": max_new_tokens,
         "use_cache": True,
     }
@@ -143,9 +132,7 @@ def _run_inference(
     with torch.inference_mode():
         output_ids = _model.generate(input_ids, **gen_kwargs)
 
-    # Decode only the newly generated tokens
-    new_ids = output_ids[:, input_ids.shape[1]:]
-    output_text = _tokenizer.batch_decode(new_ids, skip_special_tokens=True)[0].strip()
+    output_text = _tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
     return output_text
 
 

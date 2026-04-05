@@ -1,0 +1,19 @@
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+.venv/
+.venv_qwen/
+
+# 动态下载的数据和模型 (通过 setup.sh 获取)
+ChartMimic/
+models/
+data/
+
+# 运行结果
+results/
+
+# OS / IDE
+.DS_Store
+*.swp
+*.swo

@@ -237,6 +237,7 @@ def run(
     output_dir: Path,
     num_samples: int = -1,
     skip_baseline: bool = False,
+    skip_critic: bool = False,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -263,6 +264,16 @@ def run(
         baseline_results = run_baseline_pass(samples, cfg, baseline_path)
 
     # ── Critic ────────────────────────────────────────────────────────────────
+    if skip_critic:
+        logging.info("Skipping critic pass (--skip-critic set)")
+        # Write a minimal summary of baseline results only
+        stats = summary_stats(baseline_results, [])
+        table = format_summary_table(stats)
+        print(table)
+        summary_path.write_text(table, encoding="utf-8")
+        logging.info("Summary saved → %s", summary_path)
+        return
+
     critic_results = run_critic_pass(samples, cfg, critic_path)
 
     # Align by example_id
